@@ -1,0 +1,51 @@
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS/editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.agents/
+.codex/
+CODEX.md
+
+# Data and generated dataset artifacts
+fall_dataset/
+prepared_dataset/
+test_dataset/
+
+# Annotation workspace and exports
+annotations/
+annotation_workspace/
+auto_labels/
+label_exports/
+cvat/
+label_studio/
+labeling/
+*.xml
+*.jsonl
+
+# Training outputs and model artifacts
+runs/
+results/
+models/
+checkpoints/
+weights/
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Logs and caches
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+wandb/
