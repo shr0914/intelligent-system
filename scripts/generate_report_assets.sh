@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
+
 if [[ -x ".venv/bin/python" ]]; then
   PYTHON=".venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
@@ -10,4 +11,4 @@ else
   PYTHON="python"
 fi
 
-exec "$PYTHON" scripts/run_gui.py --mode one-step --source 0 "$@"
+"$PYTHON" scripts/run_report_assets.py "$@"

@@ -101,8 +101,22 @@ After running the three notebooks, use these scripts to complete the remaining b
 
 ### Condition-based analysis and report assets
 
+Cross-platform command:
+
 ```bash
-.venv/bin/python scripts/evaluate_conditions.py
+python scripts/run_report_assets.py
+```
+
+Linux/macOS:
+
+```bash
+./generate_report_assets.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\generate_report_assets.ps1
 ```
 
 This exports lighting-based analysis to:
@@ -124,45 +138,135 @@ The current condition split uses the folder structure in `test_dataset/`:
 - `Normal Light`
 - `Low Light`
 
+The exported `runs/report_assets/test_condition_metadata.csv` also includes optional columns for `viewpoint`, `distance`, and `environment`. If those columns are filled and passed back to the script, extra condition summaries are generated:
+
+Cross-platform:
+
+```bash
+python scripts/run_report_assets.py --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+Linux/macOS:
+
+```bash
+./generate_report_assets.sh --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+Windows PowerShell:
+
+```powershell
+.\generate_report_assets.ps1 --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+Readiness check only:
+
+```bash
+python scripts/check_project_ready.py
+```
+
 ### Live GUI demo
 
 One-step webcam demo:
+
+Cross-platform:
+
+```bash
+python scripts/run_gui.py --mode one-step --source 0
+```
+
+Linux/macOS:
 
 ```bash
 ./start_gui.sh
 ```
 
+Windows PowerShell:
+
+```powershell
+.\start_gui.ps1
+```
+
 Two-step webcam demo:
+
+Cross-platform:
+
+```bash
+python scripts/run_gui.py --mode two-step --source 0
+```
+
+Linux/macOS:
 
 ```bash
 ./start_gui.sh two-step
 ```
 
+Windows PowerShell:
+
+```powershell
+.\start_gui.ps1 two-step
+```
+
 You can also use the explicit launchers:
+
+Linux/macOS:
 
 ```bash
 ./start_one_step_gui.sh
 ./start_two_step_gui.sh
 ```
 
+Windows PowerShell:
+
+```powershell
+.\start_one_step_gui.ps1
+.\start_two_step_gui.ps1
+```
+
 The GUI draws bounding boxes and predicted labels on the camera feed, while status, class counts, FPS, and alert information are shown in the side panel.
 
 Headless annotated-video export:
 
+Cross-platform:
+
+```bash
+python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
+```
+
+Linux/macOS:
+
 ```bash
 ./start_gui.sh --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_gui.ps1 --source path\to\demo.mp4 --no-display --output runs\report_assets\demo_one_step.mp4
 ```
 
 ## Environment Setup
 
 Create a local virtual environment and install dependencies:
 
+Linux/macOS:
+
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If PyTorch installation fails, install the matching `torch`, `torchvision`, and `torchaudio` packages for your OS and CUDA version from the official PyTorch install selector, then rerun `pip install -r requirements.txt`.
 
 ## Current Status
 
@@ -177,11 +281,11 @@ Completed:
 - lighting-based condition analysis
 - report-ready condition tables and plots
 - basic OpenCV live GUI for one-step and two-step inference
+- short reproducible commands for GUI launch, report asset generation, and readiness checks
 
 Next:
 
-- test the GUI with a webcam or recorded demo video
-- add viewpoint/distance notes if the team wants a stronger condition analysis
+- optionally fill viewpoint/distance/environment metadata for stronger condition analysis
 - write the project report and record the presentation/demo video
 
 ## Important Project Notes

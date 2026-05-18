@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
 import cv2
-os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -51,6 +52,15 @@ def parse_args() -> argparse.Namespace:
         default=0.25,
         help="Minimum confidence for one-step JSON predictions used in fixed-threshold condition metrics.",
     )
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        default=None,
+        help=(
+            "Optional CSV with image metadata. Supported columns: image_path, "
+            "file_name, stem, lighting, viewpoint, distance, environment."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -79,11 +89,26 @@ def build_raw_metadata(raw_root: Path) -> pd.DataFrame:
                 "stem": image_path.stem,
                 "raw_path": str(image_path),
                 "lighting": lighting,
+                "viewpoint": "",
+                "distance": "",
+                "environment": "",
                 "folder_class": folder_class,
                 "folder_class_id": FOLDER_CLASS_TO_ID.get(folder_class),
             }
         )
     return pd.DataFrame(rows)
+
+
+def load_manual_metadata(metadata_path: Path | None) -> pd.DataFrame:
+    if metadata_path is None or not metadata_path.exists():
+        return pd.DataFrame()
+    metadata = pd.read_csv(metadata_path)
+    if "stem" not in metadata.columns:
+        if "file_name" in metadata.columns:
+            metadata["stem"] = metadata["file_name"].map(lambda value: Path(str(value)).stem)
+        elif "image_path" in metadata.columns:
+            metadata["stem"] = metadata["image_path"].map(lambda value: Path(str(value)).stem)
+    return metadata
 
 
 def build_prepared_metadata(prepared_root: Path, raw_metadata: pd.DataFrame) -> pd.DataFrame:
@@ -99,11 +124,35 @@ def build_prepared_metadata(prepared_root: Path, raw_metadata: pd.DataFrame) -> 
                 "file_name": image_path.name,
                 "stem": image_path.stem,
                 "lighting": raw.get("lighting", "unknown") if isinstance(raw, pd.Series) else "unknown",
+                "viewpoint": raw.get("viewpoint", "") if isinstance(raw, pd.Series) else "",
+                "distance": raw.get("distance", "") if isinstance(raw, pd.Series) else "",
+                "environment": raw.get("environment", "") if isinstance(raw, pd.Series) else "",
                 "folder_class": raw.get("folder_class", "unknown") if isinstance(raw, pd.Series) else "unknown",
                 "folder_class_id": raw.get("folder_class_id") if isinstance(raw, pd.Series) else None,
             }
         )
     return pd.DataFrame(rows)
+
+
+def apply_manual_metadata(metadata: pd.DataFrame, manual_metadata: pd.DataFrame) -> pd.DataFrame:
+    if manual_metadata.empty or "stem" not in manual_metadata.columns:
+        return metadata
+
+    manual_by_stem = manual_metadata.drop_duplicates("stem").set_index("stem")
+    enriched = metadata.copy()
+    for column in ["lighting", "viewpoint", "distance", "environment"]:
+        if column not in enriched.columns:
+            enriched[column] = ""
+        if column not in manual_by_stem.columns:
+            continue
+        for index, row in enriched.iterrows():
+            stem = row["stem"]
+            if stem not in manual_by_stem.index:
+                continue
+            manual_value = manual_by_stem.loc[stem, column]
+            if pd.notna(manual_value) and str(manual_value).strip():
+                enriched.at[index, column] = str(manual_value).strip()
+    return enriched
 
 
 def yolo_to_xyxy(row: str, width: int, height: int) -> dict[str, float]:
@@ -149,36 +198,53 @@ def iou(box_a: dict[str, float], box_b: dict[str, float]) -> float:
     return inter_area / union if union > 0 else 0.0
 
 
-def summarize_counts(records: list[dict[str, object]]) -> tuple[pd.DataFrame, pd.DataFrame]:
+def summarize_counts(
+    records: list[dict[str, object]],
+    condition_column: str = "lighting",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     summary_rows = []
     class_rows = []
     df = pd.DataFrame(records)
-    for lighting, group in df.groupby("lighting", dropna=False):
+    if condition_column not in df.columns:
+        return pd.DataFrame(), pd.DataFrame()
+    df[condition_column] = df[condition_column].fillna("").replace("", "unlabeled")
+    for condition_value, group in df.groupby(condition_column, dropna=False):
         tp = int((group["match_type"] == "tp").sum())
         fp = int((group["match_type"] == "fp").sum())
         fn = int((group["match_type"] == "fn").sum())
-        summary_rows.append(metric_row(lighting, "all", tp, fp, fn))
+        summary_rows.append(metric_row(str(condition_value), "all", tp, fp, fn, condition_column=condition_column))
         for class_id, class_group in group.groupby("class_id", dropna=False):
             tp = int((class_group["match_type"] == "tp").sum())
             fp = int((class_group["match_type"] == "fp").sum())
             fn = int((class_group["match_type"] == "fn").sum())
-            class_rows.append(metric_row(lighting, CLASS_NAMES.get(int(class_id), str(class_id)), tp, fp, fn, int(class_id)))
+            class_rows.append(
+                metric_row(
+                    str(condition_value),
+                    CLASS_NAMES.get(int(class_id), str(class_id)),
+                    tp,
+                    fp,
+                    fn,
+                    int(class_id),
+                    condition_column=condition_column,
+                )
+            )
     return pd.DataFrame(summary_rows), pd.DataFrame(class_rows)
 
 
 def metric_row(
-    lighting: str,
+    condition_value: str,
     class_name: str,
     tp: int,
     fp: int,
     fn: int,
     class_id: int | None = None,
+    condition_column: str = "lighting",
 ) -> dict[str, object]:
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     return {
-        "lighting": lighting,
+        condition_column: condition_value,
         "class_id": class_id,
         "class_name": class_name,
         "tp": tp,
@@ -226,7 +292,11 @@ def evaluate_one_step(
 
     match_rows = []
     for file_name, gt_boxes in gt_by_file.items():
-        lighting = metadata_by_file.loc[file_name, "lighting"] if file_name in metadata_by_file.index else "unknown"
+        metadata_row = metadata_by_file.loc[file_name] if file_name in metadata_by_file.index else {}
+        lighting = metadata_row.get("lighting", "unknown") if isinstance(metadata_row, pd.Series) else "unknown"
+        viewpoint = metadata_row.get("viewpoint", "") if isinstance(metadata_row, pd.Series) else ""
+        distance = metadata_row.get("distance", "") if isinstance(metadata_row, pd.Series) else ""
+        environment = metadata_row.get("environment", "") if isinstance(metadata_row, pd.Series) else ""
         used = [False] * len(gt_boxes)
         for pred in sorted(preds_by_file.get(file_name, []), key=lambda item: item["score"], reverse=True):
             best_iou = 0.0
@@ -248,6 +318,9 @@ def evaluate_one_step(
                     "model": "one-step YOLO",
                     "file_name": file_name,
                     "lighting": lighting,
+                    "viewpoint": viewpoint,
+                    "distance": distance,
+                    "environment": environment,
                     "class_id": pred["class_id"],
                     "class_name": CLASS_NAMES[pred["class_id"]],
                     "iou": best_iou,
@@ -261,6 +334,9 @@ def evaluate_one_step(
                         "model": "one-step YOLO",
                         "file_name": file_name,
                         "lighting": lighting,
+                        "viewpoint": viewpoint,
+                        "distance": distance,
+                        "environment": environment,
                         "class_id": gt["class_id"],
                         "class_name": CLASS_NAMES[gt["class_id"]],
                         "iou": None,
@@ -281,9 +357,23 @@ def evaluate_two_step(
     matches = pd.read_csv(matches_path)
     metadata_by_path = metadata.set_index("image_path")
     matches["lighting"] = matches["image_path"].map(metadata_by_path["lighting"]).fillna("unknown")
+    matches["viewpoint"] = matches["image_path"].map(metadata_by_path["viewpoint"]).fillna("")
+    matches["distance"] = matches["image_path"].map(metadata_by_path["distance"]).fillna("")
+    matches["environment"] = matches["image_path"].map(metadata_by_path["environment"]).fillna("")
     matches["model"] = "two-step detector + classifier"
     records = matches[
-        ["model", "image_path", "lighting", "class_id", "class_name", "iou", "match_type"]
+        [
+            "model",
+            "image_path",
+            "lighting",
+            "viewpoint",
+            "distance",
+            "environment",
+            "class_id",
+            "class_name",
+            "iou",
+            "match_type",
+        ]
     ].to_dict(orient="records")
     summary, per_class = summarize_counts(records)
     summary.insert(0, "model", "two-step detector + classifier")
@@ -291,11 +381,11 @@ def evaluate_two_step(
     return summary, per_class, pd.DataFrame(records)
 
 
-def save_metric_plot(df: pd.DataFrame, output_path: Path, metric: str) -> None:
-    pivot = df.pivot(index="lighting", columns="model", values=metric).sort_index()
+def save_metric_plot(df: pd.DataFrame, output_path: Path, metric: str, condition_column: str = "lighting") -> None:
+    pivot = df.pivot(index=condition_column, columns="model", values=metric).sort_index()
     ax = pivot.plot(kind="bar", figsize=(8, 4), ylim=(0, 1), rot=0)
-    ax.set_title(f"{metric.upper()} by lighting condition")
-    ax.set_xlabel("Lighting condition")
+    ax.set_title(f"{metric.upper()} by {condition_column}")
+    ax.set_xlabel(condition_column.replace("_", " ").title())
     ax.set_ylabel(metric.upper())
     ax.legend(loc="lower right")
     ax.grid(axis="y", alpha=0.3)
@@ -310,7 +400,9 @@ def main() -> None:
     predictions_path = args.one_step_predictions or find_one_step_predictions()
 
     raw_metadata = build_raw_metadata(args.raw_test)
+    manual_metadata = load_manual_metadata(args.metadata)
     metadata = build_prepared_metadata(args.prepared, raw_metadata)
+    metadata = apply_manual_metadata(metadata, manual_metadata)
     gt_by_file = load_ground_truth(args.prepared, metadata)
 
     one_summary, one_per_class, one_matches = evaluate_one_step(
@@ -332,6 +424,47 @@ def main() -> None:
     save_metric_plot(condition_summary, args.output / "condition_precision_by_lighting.png", "precision")
     save_metric_plot(condition_summary, args.output / "condition_recall_by_lighting.png", "recall")
 
+    optional_condition_columns = ["viewpoint", "distance", "environment"]
+    for condition_column in optional_condition_columns:
+        if condition_column not in condition_matches.columns:
+            continue
+        values = {
+            str(value).strip()
+            for value in condition_matches[condition_column].dropna().unique()
+            if str(value).strip()
+        }
+        if not values:
+            continue
+
+        summaries = []
+        per_class_tables = []
+        for model_name, model_matches in condition_matches.groupby("model"):
+            summary, per_class = summarize_counts(
+                model_matches.to_dict(orient="records"),
+                condition_column=condition_column,
+            )
+            if not summary.empty:
+                summary.insert(0, "model", model_name)
+                summaries.append(summary)
+            if not per_class.empty:
+                per_class.insert(0, "model", model_name)
+                per_class_tables.append(per_class)
+
+        if summaries:
+            condition_df = pd.concat(summaries, ignore_index=True)
+            condition_df.to_csv(args.output / f"condition_summary_by_{condition_column}.csv", index=False)
+            save_metric_plot(
+                condition_df,
+                args.output / f"condition_f1_by_{condition_column}.png",
+                "f1",
+                condition_column=condition_column,
+            )
+        if per_class_tables:
+            pd.concat(per_class_tables, ignore_index=True).to_csv(
+                args.output / f"condition_per_class_by_{condition_column}.csv",
+                index=False,
+            )
+
     report_notes = {
         "one_step_predictions": str(predictions_path),
         "one_step_confidence_threshold": args.one_step_conf,
@@ -339,6 +472,7 @@ def main() -> None:
         "prepared_test_images": int(len(metadata)),
         "raw_test_images": int(len(raw_metadata)),
         "prepared_images_without_raw_metadata": int((metadata["lighting"] == "unknown").sum()),
+        "manual_metadata": str(args.metadata) if args.metadata else None,
     }
     (args.output / "report_asset_notes.json").write_text(
         json.dumps(report_notes, indent=2), encoding="utf-8"

@@ -3,7 +3,7 @@
 This document summarizes the current basic-version evidence after running the three notebooks plus:
 
 ```bash
-.venv/bin/python scripts/evaluate_conditions.py
+python scripts/run_report_assets.py
 ```
 
 ## Completed Basic Requirements
@@ -14,6 +14,7 @@ This document summarizes the current basic-version evidence after running the th
 - One-step vs two-step comparison outputs.
 - Lighting-based condition analysis using `Normal Light` and `Low Light`.
 - Basic OpenCV live GUI with fall-alert banner.
+- Reproducible readiness check for dataset counts and expected outputs.
 
 ## Lighting-Based Condition Summary
 
@@ -61,24 +62,66 @@ The script exports local report-ready files under `runs/report_assets/`:
 - `condition_recall_by_lighting.png`
 - `report_asset_notes.json`
 
+To regenerate and verify these assets:
+
+Cross-platform:
+
+```bash
+python scripts/run_report_assets.py
+```
+
+Linux/macOS:
+
+```bash
+./generate_report_assets.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\generate_report_assets.ps1
+```
+
+The generated `test_condition_metadata.csv` includes optional `viewpoint`, `distance`, and `environment` columns. After filling those values, rerun:
+
+Cross-platform:
+
+```bash
+python scripts/run_report_assets.py --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+Linux/macOS:
+
+```bash
+./generate_report_assets.sh --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+Windows PowerShell:
+
+```powershell
+.\generate_report_assets.ps1 --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+This creates additional summaries such as `condition_summary_by_viewpoint.csv`, `condition_summary_by_distance.csv`, and matching F1 charts when those columns contain values.
+
 ## GUI Commands
 
 One-step webcam demo:
 
 ```bash
-.venv/bin/python scripts/live_fall_gui.py --mode one-step --source 0
+python scripts/run_gui.py --mode one-step --source 0
 ```
 
 Two-step webcam demo:
 
 ```bash
-.venv/bin/python scripts/live_fall_gui.py --mode two-step --source 0
+python scripts/run_gui.py --mode two-step --source 0
 ```
 
 Headless annotated-video export:
 
 ```bash
-.venv/bin/python scripts/live_fall_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
+python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
 ```
 
 ## Remaining Basic-Version Work
