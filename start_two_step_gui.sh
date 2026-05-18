@@ -2,4 +2,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-exec .venv/bin/python scripts/live_fall_gui.py --mode two-step --source 0 "$@"
+if [[ -x ".venv/bin/python" ]]; then
+  PYTHON=".venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON="python3"
+else
+  PYTHON="python"
+fi
+
+exec "$PYTHON" scripts/run_gui.py --mode two-step --source 0 "$@"

@@ -334,13 +334,21 @@ def open_source(source: str, camera_width: int, camera_height: int) -> cv2.Video
     return cv2.VideoCapture(source)
 
 
+def require_file(path: Path, label: str) -> None:
+    if not path.exists():
+        raise SystemExit(f"Missing {label}: {path}")
+
+
 def main() -> None:
     args = parse_args()
     if args.mode == "one-step":
+        require_file(args.one_step_weights, "one-step model weights")
         model = YOLO(str(args.one_step_weights))
         classifier = None
         transform = None
     else:
+        require_file(args.person_weights, "person detector weights")
+        require_file(args.classifier_weights, "two-step classifier weights")
         model = YOLO(str(args.person_weights))
         classifier = load_classifier(args.classifier_weights, args.device)
         transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
