@@ -10,3 +10,4 @@ seaborn
 pyyaml
 scikit-learn
 tqdm
+gradio

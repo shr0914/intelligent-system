@@ -13,7 +13,7 @@ python scripts/run_report_assets.py
 - Held-out self-collected test set evaluation.
 - One-step vs two-step comparison outputs.
 - Lighting-based condition analysis using `Normal Light` and `Low Light`.
-- Basic OpenCV live GUI with fall-alert banner.
+- Basic OpenCV live GUI with Full HD dashboard, smoothed fall-alert banner, optional CSV event logging, and alert-frame export.
 - Reproducible readiness check for dataset counts and expected outputs.
 
 ## Lighting-Based Condition Summary
@@ -104,6 +104,52 @@ Windows PowerShell:
 
 This creates additional summaries such as `condition_summary_by_viewpoint.csv`, `condition_summary_by_distance.csv`, and matching F1 charts when those columns contain values.
 
+## Low-Light Extension Assets
+
+The extension script evaluates inference-time low-light enhancement modes:
+
+```bash
+python scripts/evaluate_low_light_extension.py
+```
+
+Generated assets:
+
+- `low_light_extension_summary.csv`
+- `low_light_extension_per_class.csv`
+- `low_light_extension_match_details.csv`
+- `low_light_extension_f1.png`
+- `low_light_extension_notes.json`
+- `low_light_extension_examples/`
+
+Current low-light summary:
+
+| Model | Best enhancement | Baseline F1 | Best F1 |
+| --- | --- | ---: | ---: |
+| one-step YOLO | auto | 0.580 | 0.661 |
+| two-step detector + classifier | clahe | 0.821 | 0.823 |
+
+## Inference Tuning Assets
+
+The tuning script searches practical inference settings without collecting new data:
+
+```bash
+python scripts/tune_model_thresholds.py
+```
+
+Generated assets:
+
+- `tuned_inference_summary.csv`
+- `tuned_inference_per_class.csv`
+- `tuned_inference_match_details.csv`
+- `tuned_inference_top_f1.png`
+
+Current best settings:
+
+| Model | Best setting | Precision | Recall | F1 |
+| --- | --- | ---: | ---: | ---: |
+| one-step YOLO | `conf=0.25` | 0.660 | 0.701 | 0.680 |
+| two-step detector + classifier | `person_conf=0.30`, `padding=0.10` | 0.797 | 0.862 | 0.828 |
+
 ## GUI Commands
 
 One-step webcam demo:
@@ -121,8 +167,43 @@ python scripts/run_gui.py --mode two-step --source 0
 Headless annotated-video export:
 
 ```bash
-python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
+python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4 --log-csv runs/report_assets/demo_one_step_events.csv
 ```
+
+The live GUI also supports runtime keyboard controls for demo use:
+
+- `E`: cycle enhancement mode.
+- `[` / `]`: adjust gamma.
+- `-` / `=`: adjust confidence threshold.
+- `C`: cycle CLAHE clip limit.
+- `V`: cycle low-light threshold.
+- `F`: cycle required fall frames.
+- `H`: cycle alert hold duration.
+- `L`: toggle CSV event logging.
+- `S`: save a dashboard screenshot.
+- `Q`: quit.
+
+## Gradio Web App
+
+Optional browser interface:
+
+```bash
+python scripts/run_web_app.py
+```
+
+Linux/macOS:
+
+```bash
+./start_web_app.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_web_app.ps1
+```
+
+Open `http://127.0.0.1:7860`. The web app supports native-like live detection from an OpenCV camera loop, image upload, browser webcam streaming, one-step/two-step inference, low-light enhancement controls, confidence tuning, crop padding, dashboard output, and detection summaries. Use `--stream-every 0.2` for faster live-camera refresh when the machine can keep up.
 
 ## Remaining Basic-Version Work
 

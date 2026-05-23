@@ -164,6 +164,100 @@ Readiness check only:
 python scripts/check_project_ready.py
 ```
 
+### Low-light robustness extension
+
+The extension evaluates inference-time low-light enhancement using:
+
+- `none`
+- `gamma`
+- `clahe`
+- `gamma-clahe`
+- `auto`
+
+Generate extension assets:
+
+Cross-platform:
+
+```bash
+python scripts/evaluate_low_light_extension.py
+```
+
+Linux/macOS:
+
+```bash
+./generate_low_light_extension.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\generate_low_light_extension.ps1
+```
+
+This exports:
+
+```text
+runs/report_assets/
+  low_light_extension_summary.csv
+  low_light_extension_per_class.csv
+  low_light_extension_match_details.csv
+  low_light_extension_f1.png
+  low_light_extension_notes.json
+  low_light_extension_examples/
+```
+
+The GUI can use the same enhancement modes:
+
+Cross-platform:
+
+```bash
+python scripts/run_gui.py --mode one-step --source 0 --enhancement auto
+python scripts/run_gui.py --mode two-step --source 0 --enhancement clahe
+```
+
+Linux/macOS:
+
+```bash
+./start_gui.sh --enhancement auto
+./start_gui.sh two-step --enhancement clahe
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_gui.ps1 --enhancement auto
+.\start_gui.ps1 two-step --enhancement clahe
+```
+
+### Inference tuning
+
+The current two-step classifier already uses a pretrained ResNet18, so the fastest model-quality improvement is tuning inference settings and crop padding rather than retraining immediately.
+
+Generate threshold and padding tuning assets:
+
+Cross-platform:
+
+```bash
+python scripts/tune_model_thresholds.py
+```
+
+This exports:
+
+```text
+runs/report_assets/
+  tuned_inference_summary.csv
+  tuned_inference_per_class.csv
+  tuned_inference_match_details.csv
+  tuned_inference_top_f1.png
+```
+
+Current best tuned settings:
+
+| Model | Best setting | Precision | Recall | F1 |
+| --- | --- | ---: | ---: | ---: |
+| one-step YOLO | `conf=0.25` | 0.660 | 0.701 | 0.680 |
+| two-step detector + classifier | `person_conf=0.30`, `padding=0.10` | 0.797 | 0.862 | 0.828 |
+
 ### Live GUI demo
 
 One-step webcam demo:
@@ -224,25 +318,151 @@ Windows PowerShell:
 
 The GUI draws bounding boxes and predicted labels on the camera feed, while status, class counts, FPS, and alert information are shown in the side panel.
 
-Headless annotated-video export:
+The default GUI canvas is Full HD (`1920x1080`) and requests `1920x1080` camera input at `60` FPS when the camera supports it. The fall alert is smoothed by default: it activates after `3` consecutive fall frames and remains visible briefly to avoid flickering. The two-step GUI uses `0.10` crop padding by default because tuning improved the end-to-end F1 score.
+
+Runtime keyboard controls:
+
+| Key | Action |
+| --- | --- |
+| `E` | Cycle enhancement mode: `none`, `gamma`, `clahe`, `gamma-clahe`, `auto` |
+| `[` / `]` | Decrease / increase gamma |
+| `-` / `=` | Decrease / increase confidence threshold |
+| `C` | Cycle CLAHE clip limit |
+| `V` | Cycle low-light threshold |
+| `F` | Cycle required fall frames |
+| `H` | Cycle alert hold duration |
+| `L` | Toggle CSV event logging |
+| `S` | Save current dashboard screenshot |
+| `Q` | Quit |
+
+Useful GUI options:
 
 Cross-platform:
 
 ```bash
-python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
+python scripts/run_gui.py \
+  --mode one-step \
+  --source 0 \
+  --enhancement auto \
+  --crop-padding 0.10 \
+  --fall-frames 3 \
+  --alert-hold-seconds 2.5 \
+  --log-csv runs/report_assets/gui_events.csv \
+  --save-alert-frames runs/report_assets/gui_alert_frames
 ```
 
 Linux/macOS:
 
 ```bash
-./start_gui.sh --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4
+./start_gui.sh \
+  --enhancement auto \
+  --fall-frames 3 \
+  --alert-hold-seconds 2.5 \
+  --log-csv runs/report_assets/gui_events.csv \
+  --save-alert-frames runs/report_assets/gui_alert_frames
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\start_gui.ps1 --source path\to\demo.mp4 --no-display --output runs\report_assets\demo_one_step.mp4
+.\start_gui.ps1 `
+  --enhancement auto `
+  --fall-frames 3 `
+  --alert-hold-seconds 2.5 `
+  --log-csv runs\report_assets\gui_events.csv `
+  --save-alert-frames runs\report_assets\gui_alert_frames
 ```
+
+Image and folder sources are also supported for smoke tests:
+
+Cross-platform:
+
+```bash
+python scripts/run_gui.py --mode one-step --source test_dataset --no-display --max-frames 30
+```
+
+Linux/macOS:
+
+```bash
+./start_gui.sh --source test_dataset --no-display --max-frames 30
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_gui.ps1 --source test_dataset --no-display --max-frames 30
+```
+
+Headless annotated-video export:
+
+Cross-platform:
+
+```bash
+python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4 --log-csv runs/report_assets/demo_one_step_events.csv
+```
+
+Linux/macOS:
+
+```bash
+./start_gui.sh --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4 --log-csv runs/report_assets/demo_one_step_events.csv
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_gui.ps1 --source path\to\demo.mp4 --no-display --output runs\report_assets\demo_one_step.mp4 --log-csv runs\report_assets\demo_one_step_events.csv
+```
+
+### Gradio web app
+
+The project also includes an optional browser-based Gradio interface. It keeps the native OpenCV GUI as the lowest-latency fallback, while providing a cleaner web UI with native-like live OpenCV camera detection, browser webcam streaming, and image upload.
+
+Cross-platform:
+
+```bash
+python scripts/run_web_app.py
+```
+
+Linux/macOS:
+
+```bash
+./start_web_app.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\start_web_app.ps1
+```
+
+Then open:
+
+```text
+http://127.0.0.1:7860
+```
+
+Useful options:
+
+```bash
+python scripts/run_web_app.py --host 0.0.0.0 --port 7860
+```
+
+For faster live-camera updates, lower the stream interval if your machine can keep up:
+
+```bash
+python scripts/run_web_app.py --stream-every 0.2
+```
+
+The web app supports:
+
+- one-step and two-step inference
+- native-like live detection from an OpenCV camera loop
+- image upload and browser webcam streaming
+- low-light enhancement modes
+- confidence threshold control
+- gamma / CLAHE / low-light threshold controls
+- two-step crop padding
+- dashboard output with detections and alert status
 
 ## Environment Setup
 
