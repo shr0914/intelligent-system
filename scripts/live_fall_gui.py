@@ -55,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--one-step-weights",
         type=Path,
-        default=PROJECT_ROOT / "runs" / "baseline_runs" / "one_step_baseline" / "weights" / "best.pt",
+        default=PROJECT_ROOT / "runs" / "one_step" / "training" / "weights" / "best.pt",
     )
     parser.add_argument(
         "--person-weights",
