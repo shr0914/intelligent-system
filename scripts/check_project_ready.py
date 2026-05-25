@@ -20,6 +20,8 @@ REQUIRED_PATHS = [
     "scripts/live_fall_gui.py",
     "scripts/run_gui.py",
     "scripts/run_report_assets.py",
+    "scripts/evaluate_pose_extension.py",
+    "scripts/pose_fall_extension.py",
 ]
 
 
@@ -80,6 +82,20 @@ def main() -> None:
         print(f"{status:7} runs/report_assets/{asset}")
         if not path.exists():
             failures.append(f"runs/report_assets/{asset}")
+
+    pose_assets = [
+        "pose_metrics_summary.csv",
+        "pose_per_class_metrics.csv",
+        "pose_condition_summary.csv",
+        "pose_extension_notes.json",
+    ]
+    print()
+    print("Pose extension assets")
+    print("=" * 21)
+    for asset in pose_assets:
+        path = report_assets / asset
+        status = "OK" if path.exists() else "OPTIONAL"
+        print(f"{status:7} runs/report_assets/{asset}")
 
     print()
     if failures:

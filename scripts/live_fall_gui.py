@@ -17,6 +17,11 @@ from torchvision import models, transforms
 from ultralytics import YOLO
 
 from low_light_enhancement import ENHANCEMENT_MODES, enhance_low_light, mean_luminance
+from pose_fall_extension import (
+    PoseRuleConfig,
+    draw_pose_prediction,
+    predict_pose,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -205,7 +210,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Live fall-detection GUI demo.")
     parser.add_argument(
         "--mode",
-        choices=["one-step", "two-step"],
+        choices=["one-step", "two-step", "pose"],
         default="one-step",
         help="Inference pipeline to run.",
     )
@@ -228,6 +233,11 @@ def parse_args() -> argparse.Namespace:
         "--classifier-weights",
         type=Path,
         default=PROJECT_ROOT / "runs" / "two_step" / "classifier_runs" / "best_classifier.pt",
+    )
+    parser.add_argument(
+        "--pose-weights",
+        type=Path,
+        default=PROJECT_ROOT / "yolov8n-pose.pt",
     )
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--imgsz", type=int, default=640)
@@ -253,6 +263,13 @@ def parse_args() -> argparse.Namespace:
         default=0.10,
         help="Two-step crop padding ratio around detected person boxes before classification.",
     )
+    parser.add_argument("--pose-fall-angle-threshold", type=float, default=55.0)
+    parser.add_argument("--pose-fall-ratio-threshold", type=float, default=0.90)
+    parser.add_argument("--pose-fall-vertical-spread-threshold", type=float, default=0.80)
+    parser.add_argument("--pose-sit-ratio-threshold", type=float, default=0.45)
+    parser.add_argument("--pose-sit-knee-hip-threshold", type=float, default=0.15)
+    parser.add_argument("--pose-min-keypoint-conf", type=float, default=0.25)
+    parser.add_argument("--pose-min-visible-keypoints", type=int, default=5)
     parser.add_argument(
         "--camera-width",
         type=int,
@@ -717,6 +734,25 @@ def run_two_step(
     return fall_detected, detections
 
 
+def run_pose(
+    frame: np.ndarray,
+    model: YOLO,
+    conf: float,
+    imgsz: int,
+    config: PoseRuleConfig,
+) -> tuple[bool, list[dict[str, object]]]:
+    predictions = predict_pose(model, frame, conf, imgsz, config)
+    detections = []
+    fall_detected = False
+    for prediction in predictions:
+        draw_pose_prediction(frame, prediction)
+        class_id = int(prediction["class_id"])
+        confidence = float(prediction["score"])
+        detections.append({"class_id": class_id, "confidence": confidence})
+        fall_detected = fall_detected or class_id == 0
+    return fall_detected, detections
+
+
 def require_file(path: Path, label: str) -> None:
     if not path.exists():
         raise SystemExit(
@@ -867,17 +903,31 @@ def main() -> None:
     settings = GuiSettings.from_args(args)
     alert_state = AlertState(settings.fall_frames, settings.alert_hold_seconds, settings.fall_confidence)
 
+    pose_config = PoseRuleConfig(
+        fall_angle_threshold=args.pose_fall_angle_threshold,
+        fall_ratio_threshold=args.pose_fall_ratio_threshold,
+        fall_vertical_spread_threshold=args.pose_fall_vertical_spread_threshold,
+        sit_ratio_threshold=args.pose_sit_ratio_threshold,
+        sit_knee_hip_threshold=args.pose_sit_knee_hip_threshold,
+        min_keypoint_conf=args.pose_min_keypoint_conf,
+        min_visible_keypoints=args.pose_min_visible_keypoints,
+    )
+
     if args.mode == "one-step":
         require_file(args.one_step_weights, "one-step model weights")
         model = YOLO(str(args.one_step_weights))
         classifier = None
         transform = None
-    else:
+    elif args.mode == "two-step":
         require_file(args.person_weights, "person detector weights")
         require_file(args.classifier_weights, "two-step classifier weights")
         model = YOLO(str(args.person_weights))
         classifier = load_classifier(args.classifier_weights, args.device)
         transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
+    else:
+        model = YOLO(str(args.pose_weights))
+        classifier = None
+        transform = None
 
     source = FrameSource(args.source, args.camera_width, args.camera_height, args.camera_fps)
     if not source.is_opened():
@@ -910,7 +960,7 @@ def main() -> None:
 
         if args.mode == "one-step":
             fall_detected, detections = run_one_step(inference_frame, model, settings.confidence, args.imgsz)
-        else:
+        elif args.mode == "two-step":
             fall_detected, detections = run_two_step(
                 inference_frame,
                 model,
@@ -920,6 +970,14 @@ def main() -> None:
                 args.imgsz,
                 args.device,
                 args.crop_padding,
+            )
+        else:
+            fall_detected, detections = run_pose(
+                inference_frame,
+                model,
+                settings.confidence,
+                args.imgsz,
+                pose_config,
             )
         _ = fall_detected
         alert = alert_state.update(detections, time.perf_counter())

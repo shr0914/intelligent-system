@@ -183,28 +183,6 @@ The live GUI also supports runtime keyboard controls for demo use:
 - `S`: save a dashboard screenshot.
 - `Q`: quit.
 
-## Gradio Web App
-
-Optional browser interface:
-
-```bash
-python scripts/run_web_app.py
-```
-
-Linux/macOS:
-
-```bash
-./start_web_app.sh
-```
-
-Windows PowerShell:
-
-```powershell
-.\start_web_app.ps1
-```
-
-Open `http://127.0.0.1:7860`. The web app supports native-like live detection from an OpenCV camera loop, image upload, browser webcam streaming, one-step/two-step inference, low-light enhancement controls, confidence tuning, crop padding, dashboard output, and detection summaries. Use `--stream-every 0.2` for faster live-camera refresh when the machine can keep up.
-
 ## Remaining Basic-Version Work
 
 - Test the GUI with the actual webcam or final demo video source.
