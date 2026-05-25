@@ -18,7 +18,7 @@ The assignment requires:
 - comparative analysis under different conditions
 - a GUI with live prediction and fall alerting
 
-The current repository focuses on the model-building and evaluation pipeline first, with the GUI and extension work to be added after the baseline analysis is stable.
+The current repository focuses on the model-building and evaluation pipeline first, with the GUI and extension work to be added after the initial analysis is stable.
 
 ## Repository Structure
 
@@ -57,7 +57,7 @@ Notes:
 
 ## Notebook Workflow
 
-### 1. One-step baseline
+### 1. One-Step Detection Pipeline
 
 Notebook:
 
@@ -66,11 +66,11 @@ Notebook:
 Main tasks:
 
 - verify environment and dataset
-- train the one-step YOLO baseline
+- train the one-step detection model
 - evaluate on the held-out test set
 - save metrics and prediction outputs
 
-### 2. Two-step pipeline
+### 2. Two-Step Pipeline
 
 Notebook:
 
@@ -83,7 +83,7 @@ Main tasks:
 - build the detector + classifier pipeline
 - evaluate the two-step system on the held-out test set
 
-### 3. Model comparison
+### 3. Model Comparison
 
 Notebook:
 
@@ -94,6 +94,8 @@ Main tasks:
 - compare one-step and two-step outputs
 - summarize metrics and per-class behavior
 - generate report-ready tables and plots
+
+
 
 ## Basic-Version Completion Scripts
 
@@ -274,9 +276,9 @@ Completed:
 
 - dataset preparation
 - self-collected test-set annotation and correction
-- one-step baseline training
+- one-step model training
 - one-step held-out evaluation
-- two-step baseline implementation
+- two-step pipeline implementation
 - initial one-step vs two-step comparison
 - lighting-based condition analysis
 - report-ready condition tables and plots
