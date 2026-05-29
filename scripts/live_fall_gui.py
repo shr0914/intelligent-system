@@ -263,6 +263,21 @@ def parse_args() -> argparse.Namespace:
         default=0.10,
         help="Two-step crop padding ratio around detected person boxes before classification.",
     )
+    parser.add_argument(
+        "--two-step-fall-ratio-override",
+        type=float,
+        default=0.0,
+        help=(
+            "Demo-only two-step override. If greater than 0, relabel non-fall two-step "
+            "predictions as Fall when the person crop width/height ratio is at least this value."
+        ),
+    )
+    parser.add_argument(
+        "--two-step-fall-override-conf",
+        type=float,
+        default=0.70,
+        help="Confidence shown when --two-step-fall-ratio-override relabels a crop as Fall.",
+    )
     parser.add_argument("--pose-fall-angle-threshold", type=float, default=55.0)
     parser.add_argument("--pose-fall-ratio-threshold", type=float, default=0.90)
     parser.add_argument("--pose-fall-vertical-spread-threshold", type=float, default=0.80)
@@ -710,6 +725,8 @@ def run_two_step(
     imgsz: int,
     device: str,
     crop_padding: float,
+    fall_ratio_override: float,
+    fall_override_conf: float,
 ) -> tuple[bool, list[dict[str, object]]]:
     result = detector.predict(frame, classes=[0], conf=conf, imgsz=imgsz, verbose=False)[0]
     fall_detected = False
@@ -728,6 +745,12 @@ def run_two_step(
         if crop.size == 0:
             continue
         class_id, confidence = classify_crop(classifier, transform, crop, device)
+        crop_width = max(1, x2 - x1)
+        crop_height = max(1, y2 - y1)
+        crop_ratio = crop_width / crop_height
+        if fall_ratio_override > 0 and class_id != 0 and crop_ratio >= fall_ratio_override:
+            class_id = 0
+            confidence = max(confidence, fall_override_conf)
         draw_detection(frame, class_id, confidence, (x1, y1, x2, y2))
         detections.append({"class_id": class_id, "confidence": confidence})
         fall_detected = fall_detected or class_id == 0
@@ -970,6 +993,8 @@ def main() -> None:
                 args.imgsz,
                 args.device,
                 args.crop_padding,
+                args.two_step_fall_ratio_override,
+                args.two_step_fall_override_conf,
             )
         else:
             fall_detected, detections = run_pose(

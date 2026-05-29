@@ -1,42 +1,62 @@
 # Automated Fall Detection using AI Vision
 
-Course project for `COS30018 - Intelligent Systems`.
+Course project for **COS30018 - Intelligent Systems**.
 
-This repository implements and compares two fall-detection architectures:
+This repository implements a computer-vision fall detection system with:
 
-- one-step fall detection
-- two-step fall detection
+- **One-step YOLOv8 fall detection**
+- **Two-step person detector + ResNet-18 action classifier**
+- **Low-light robustness extension**
+- **Pose-estimation extension**
+- **Condition-based evaluation by lighting, viewpoint, distance, and environment**
+- **OpenCV GUI for live prediction and fall alerts**
 
-The project uses a labeled training dataset together with a self-collected held-out test set covering both normal-light and low-light conditions.
+## Project Overview
 
-## Project Scope
+The system detects three action classes:
 
-The assignment requires:
+| Class ID | Class Name |
+|---:|---|
+| 0 | fall detected |
+| 1 | walk |
+| 2 | sit |
 
-- a one-step fall detection model
-- a two-step fall detection model
-- comparative analysis under different conditions
-- a GUI with live prediction and fall alerting
+The main comparison is between:
 
-The current repository focuses on the model-building and evaluation pipeline first, with the GUI and extension work to be added after the baseline analysis is stable.
+- **One-step model:** a single YOLOv8 model predicts bounding boxes and action classes directly.
+- **Two-step model:** YOLOv8 first detects people, then a ResNet-18 classifier predicts the action from each person crop.
+
+The project also includes research extensions for low-light enhancement and pose-estimation-based fall recognition.
 
 ## Repository Structure
 
 ```text
 .
-├── COS30018 - Assignment 2026_S1 - Project 3-2.pdf
 ├── 01_one_step_baseline_pipeline.ipynb
 ├── 02_two_step_pipeline.ipynb
 ├── 03_model_comparison.ipynb
+├── COS30018.pdf
 ├── requirements.txt
-├── fall_dataset/
 ├── prepared_dataset/
-└── test_dataset/
+├── test_dataset/
+├── Test Dataset Distribution/
+├── scripts/
+│   ├── run_gui.py
+│   ├── live_fall_gui.py
+│   ├── low_light_enhancement.py
+│   ├── pose_fall_extension.py
+│   ├── run_report_assets.py
+│   ├── evaluate_conditions.py
+│   ├── evaluate_low_light_extension.py
+│   ├── evaluate_pose_extension.py
+│   └── tune_model_thresholds.py
+└── runs/
+    └── report_assets/
 ```
 
-## Dataset Layout
+## Dataset
 
-The working dataset used by the notebooks is:
+The working dataset is prepared in YOLO format:
 
 ```text
 prepared_dataset/
@@ -49,55 +69,44 @@ prepared_dataset/
   data.yaml
 ```
 
-Notes:
+The final evaluated test split contains **502 test images** and **648 labelled person instances**. Condition metadata is stored in:
 
-- `train/` contains the provided labeled dataset prepared for training
-- `test/` contains the self-collected and corrected held-out evaluation set
-- the test split is kept separate from training throughout the project
+```text
+runs/report_assets/test_condition_metadata.csv
+```
 
-## Notebook Workflow
+The condition metadata supports analysis by:
 
-### 1. One-step baseline
+- lighting: bright, dim, low light, normal, shadowy
+- viewpoint: front, back, side, angled, top, mixed
+- distance: close, medium, far, very far, mixed
+- environment: indoor and outdoor locations
 
-Notebook:
+## Environment Setup
 
-- `01_one_step_baseline_pipeline.ipynb`
+Create and activate a virtual environment:
 
-Main tasks:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-- verify environment and dataset
-- train the one-step YOLO baseline
-- evaluate on the held-out test set
-- save metrics and prediction outputs
+Install dependencies:
 
-### 2. Two-step pipeline
+```bash
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
+```
 
-Notebook:
+If PyTorch installation fails, install the correct `torch` and `torchvision` packages for your OS/CUDA version from the official PyTorch selector, then rerun:
 
-- `02_two_step_pipeline.ipynb`
+```bash
+python3 -m pip install -r requirements.txt
+```
 
-Main tasks:
+## Running Order
 
-- create person crops from YOLO annotations
-- train a crop classifier
-- build the detector + classifier pipeline
-- evaluate the two-step system on the held-out test set
-
-### 3. Model comparison
-
-Notebook:
-
-- `03_model_comparison.ipynb`
-
-Main tasks:
-
-- compare one-step and two-step outputs
-- summarize metrics and per-class behavior
-- generate report-ready tables and plots
-
-## Running The Project
-
-Run the notebooks in order:
+Run the notebooks in this order:
 
 ```text
 01_one_step_baseline_pipeline.ipynb
@@ -105,48 +114,50 @@ Run the notebooks in order:
 03_model_comparison.ipynb
 ```
 
-Then use the Python scripts below for checks, report assets, extensions, and demos.
+The notebooks train/evaluate the models and generate the main comparison files used by the report scripts.
 
-### Readiness Check
-
-```bash
-python scripts/check_project_ready.py
-```
-
-### Condition Analysis
+## Project Readiness Check
 
 ```bash
-python scripts/run_report_assets.py
+python3 scripts/check_project_ready.py
 ```
 
-This exports lighting-based analysis to:
+## Generate Report Assets
+
+Run this after the notebooks have completed:
+
+```bash
+python3 scripts/run_report_assets.py --metadata runs/report_assets/test_condition_metadata.csv
+```
+
+Main outputs are saved to:
 
 ```text
 runs/report_assets/
-  condition_summary.csv
-  condition_per_class.csv
-  condition_match_details.csv
-  test_condition_metadata.csv
-  condition_f1_by_lighting.png
-  condition_precision_by_lighting.png
-  condition_recall_by_lighting.png
-  report_asset_notes.json
 ```
 
-The current condition split uses the folder structure in `test_dataset/`:
+Important files include:
 
-- `Normal Light`
-- `Low Light`
+- `comparison_with_pose_summary.csv`
+- `condition_summary.csv`
+- `condition_summary_by_viewpoint.csv`
+- `condition_summary_by_distance.csv`
+- `condition_summary_by_environment.csv`
+- `condition_per_class.csv`
+- `condition_f1_by_lighting.png`
+- `condition_f1_by_viewpoint.png`
+- `condition_f1_by_distance.png`
+- `condition_f1_by_environment.png`
 
-The exported `runs/report_assets/test_condition_metadata.csv` includes optional columns for `viewpoint`, `distance`, and `environment`. If those columns are filled, pass the CSV back to generate extra condition summaries:
+## Low-Light Extension
+
+Evaluate low-light enhancement modes:
 
 ```bash
-python scripts/run_report_assets.py --metadata runs/report_assets/test_condition_metadata.csv
+python3 scripts/evaluate_low_light_extension.py --metadata runs/report_assets/test_condition_metadata.csv
 ```
 
-### Low-Light Robustness Extension
-
-The low-light extension evaluates inference-time enhancement using:
+Supported enhancement modes:
 
 - `none`
 - `gamma`
@@ -154,185 +165,142 @@ The low-light extension evaluates inference-time enhancement using:
 - `gamma-clahe`
 - `auto`
 
-Generate extension assets:
+Outputs:
+
+- `low_light_extension_summary.csv`
+- `low_light_extension_per_class.csv`
+- `low_light_extension_f1.png`
+- `low_light_extension_examples/`
+
+## Pose-Estimation Extension
+
+Evaluate the pose-estimation extension:
 
 ```bash
-python scripts/evaluate_low_light_extension.py
+python3 scripts/evaluate_pose_extension.py --metadata runs/report_assets/test_condition_metadata.csv
 ```
 
-This exports:
-
-```text
-runs/report_assets/
-  low_light_extension_summary.csv
-  low_light_extension_per_class.csv
-  low_light_extension_match_details.csv
-  low_light_extension_f1.png
-  low_light_extension_notes.json
-  low_light_extension_examples/
-```
-
-The GUI can use the same enhancement modes:
+Evaluate pose estimation with low-light enhancement modes:
 
 ```bash
-python scripts/run_gui.py --mode one-step --source 0 --enhancement auto
-python scripts/run_gui.py --mode two-step --source 0 --enhancement clahe
-python scripts/run_gui.py --mode pose --source 0 --enhancement auto
+python3 scripts/evaluate_pose_extension.py --metadata runs/report_assets/test_condition_metadata.csv --low-light-only --enhancements none gamma clahe gamma-clahe auto
 ```
 
-### Pose Estimation Extension
+Outputs:
 
-The pose extension adds a third method that uses YOLO human keypoints and transparent posture rules instead of only bounding-box appearance. It extracts features such as torso angle, width-to-height ratio, visible keypoint count, and hip/knee layout, then predicts:
+- `pose_metrics_summary.csv`
+- `pose_per_class_metrics.csv`
+- `pose_condition_summary.csv`
+- `pose_low_light_enhancement_summary.csv`
+- `pose_low_light_enhancement_f1.png`
 
-- `fall detected`
-- `walk`
-- `sit`
+## GUI Demo
 
-Generate pose extension assets:
+The GUI supports webcam, video, image, and image-folder inputs.
+
+### Webcam Modes
+
+One-step YOLO:
 
 ```bash
-python scripts/evaluate_pose_extension.py
+python3 scripts/run_gui.py --mode one-step --source 0
 ```
 
-To combine pose estimation with the low-light enhancement pipeline, run the pose evaluator on low-light images with all enhancement modes:
+Two-step detector + classifier:
 
 ```bash
-python scripts/evaluate_pose_extension.py --low-light-only --enhancements none gamma clahe gamma-clahe auto
+python3 scripts/run_gui.py --mode two-step --source 0
 ```
 
-This exports:
-
-```text
-runs/pose_extension/
-  pose_metrics_summary.csv
-  pose_per_class_metrics.csv
-  pose_match_details.csv
-  pose_predictions.csv
-  pose_condition_summary.csv
-  pose_condition_per_class.csv
-  pose_f1_by_lighting.png
-  pose_low_light_enhancement_summary.csv
-  pose_low_light_enhancement_per_class.csv
-  pose_low_light_enhancement_match_details.csv
-  pose_low_light_enhancement_f1.png
-  pose_extension_notes.json
-  examples/
-```
-
-It also copies report-ready pose summaries to:
-
-```text
-runs/report_assets/
-  pose_metrics_summary.csv
-  pose_per_class_metrics.csv
-  pose_condition_summary.csv
-  pose_condition_per_class.csv
-  pose_match_details.csv
-  pose_f1_by_lighting.png
-  pose_low_light_enhancement_summary.csv
-  pose_low_light_enhancement_per_class.csv
-  pose_low_light_enhancement_match_details.csv
-  pose_low_light_enhancement_f1.png
-  pose_extension_notes.json
-  comparison_with_pose_summary.csv
-```
-
-### Inference Tuning
-
-The current two-step classifier already uses a pretrained ResNet18, so the fastest model-quality improvement is tuning inference settings and crop padding rather than retraining immediately.
+Pose-estimation extension:
 
 ```bash
-python scripts/tune_model_thresholds.py
+python3 scripts/run_gui.py --mode pose --source 0
 ```
 
-This exports:
-
-```text
-runs/report_assets/
-  tuned_inference_summary.csv
-  tuned_inference_per_class.csv
-  tuned_inference_match_details.csv
-  tuned_inference_top_f1.png
-```
-
-Current best tuned settings:
-
-| Model | Best setting | Precision | Recall | F1 |
-| --- | --- | ---: | ---: | ---: |
-| one-step YOLO | `conf=0.25` | 0.660 | 0.701 | 0.680 |
-| two-step detector + classifier | `person_conf=0.30`, `padding=0.10` | 0.797 | 0.862 | 0.828 |
-
-### Live GUI Demo
+### Low-Light GUI Mode
 
 ```bash
-python scripts/run_gui.py --mode one-step --source 0
-python scripts/run_gui.py --mode two-step --source 0
-python scripts/run_gui.py --mode pose --source 0
+python3 scripts/run_gui.py --mode one-step --source 0 --enhancement auto
 ```
 
-The GUI draws bounding boxes or pose skeletons on the camera feed, while status, class counts, FPS, and alert information are shown in the side panel.
-
-Useful GUI options:
+```bash
+python3 scripts/run_gui.py --mode two-step --source 0 --enhancement auto
+```
 
 ```bash
-python scripts/run_gui.py \
+python3 scripts/run_gui.py --mode pose --source 0 --enhancement auto
+```
+
+### Useful GUI Options
+
+```bash
+python3 scripts/run_gui.py \
   --mode one-step \
   --source 0 \
   --enhancement auto \
-  --crop-padding 0.10 \
   --fall-frames 3 \
   --alert-hold-seconds 2.5 \
   --log-csv runs/report_assets/gui_events.csv \
   --save-alert-frames runs/report_assets/gui_alert_frames
 ```
 
-Image and folder sources are also supported for smoke tests:
+### Run On A Video File
 
 ```bash
-python scripts/run_gui.py --mode one-step --source test_dataset --no-display --max-frames 30
+python3 scripts/run_gui.py --mode one-step --source path/to/video.mp4
 ```
 
-Headless annotated-video export:
+### Run On An Image Folder
 
 ```bash
-python scripts/run_gui.py --mode one-step --source path/to/demo.mp4 --no-display --output runs/report_assets/demo_one_step.mp4 --log-csv runs/report_assets/demo_one_step_events.csv
+python3 scripts/run_gui.py --mode one-step --source path/to/image_folder
 ```
 
-## Environment Setup
-
-Create a local virtual environment and install dependencies:
+### Headless Export
 
 ```bash
-python -m venv .venv
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python3 scripts/run_gui.py \
+  --mode one-step \
+  --source path/to/video.mp4 \
+  --no-display \
+  --output runs/report_assets/demo_one_step.mp4 \
+  --log-csv runs/report_assets/demo_one_step_events.csv
 ```
 
-If PyTorch installation fails, install the matching `torch`, `torchvision`, and `torchaudio` packages for your OS and CUDA version from the official PyTorch install selector, then rerun `pip install -r requirements.txt`.
+## Optional Threshold Tuning
 
-## Current Status
+Run optional inference threshold and crop-padding tuning:
 
-Completed:
+```bash
+python3 scripts/tune_model_thresholds.py --metadata runs/report_assets/test_condition_metadata.csv
+```
 
-- dataset preparation
-- self-collected test-set annotation and correction
-- one-step baseline training
-- one-step held-out evaluation
-- two-step baseline implementation
-- initial one-step vs two-step comparison
-- lighting-based condition analysis
-- report-ready condition tables and plots
-- basic OpenCV live GUI for one-step, two-step, and pose inference
-- pose-estimation extension with keypoint features, posture rules, lighting split, and skeleton examples
-- short reproducible commands for GUI launch, report asset generation, and readiness checks
+Outputs:
 
-Next:
+- `tuned_inference_summary.csv`
+- `tuned_inference_per_class.csv`
+- `tuned_inference_match_details.csv`
+- `tuned_inference_top_f1.png`
 
-- optionally fill viewpoint/distance/environment metadata for stronger condition analysis
-- write the project report and record the presentation/demo video
+These tuning outputs are for analysis and experimentation. The main report comparison uses the final notebook and report-asset evaluation results.
 
-## Important Project Notes
+## Final Result Summary
 
-- The held-out test set must not be merged into the training split.
-- Local helper materials for annotation and assistant context are intentionally excluded from Git tracking.
-- The notebooks are intended to be readable for all team members and to support the final report workflow.
+| Model / Evaluation | Main Result |
+|---|---:|
+| One-step YOLO overall F1 | 0.775 |
+| One-step YOLO mAP@50 | 0.797 |
+| Two-step detector + classifier overall F1 | 0.759 |
+| Two-step crop classifier accuracy | 80.6% |
+| Pose-rule extension overall F1 | 0.726 |
+| One-step low-light auto-enhancement F1 | 0.810 |
+| Two-step low-light auto-enhancement F1 | 0.797 |
+
+## Notes
+
+- The held-out test set must remain separate from the training split.
+- Report-ready evaluation files are stored in `runs/report_assets/`.
+- The GUI mode is selected at launch using `--mode one-step`, `--mode two-step`, or `--mode pose`.
+- Low-light enhancement can be enabled using `--enhancement auto`.
+- The submitted report is `COS30018.pdf`.

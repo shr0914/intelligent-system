@@ -25,6 +25,21 @@ FOLDER_CLASS_TO_ID = {
     "Sit": 2,
 }
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
+CHALLENGING_LIGHTING_VALUES = {"low_light", "dim", "shadowy"}
+
+
+def normalize_condition_value(value: object) -> str:
+    return str(value).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def is_challenging_lighting(value: object) -> bool:
+    return normalize_condition_value(value) in CHALLENGING_LIGHTING_VALUES
+
+
+def select_challenging_lighting(metadata: pd.DataFrame) -> pd.DataFrame:
+    if "lighting" not in metadata.columns:
+        return metadata.iloc[0:0].copy()
+    return metadata[metadata["lighting"].map(is_challenging_lighting)].copy()
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,6 +74,17 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional CSV with image metadata. Supported columns: image_path, "
             "file_name, stem, lighting, viewpoint, distance, environment."
+        ),
+    )
+    parser.add_argument(
+        "--condition-distribution",
+        type=Path,
+        default=PROJECT_ROOT / "Test Dataset Distribution",
+        help=(
+            "Optional folder with condition subfolders. Expected layout: "
+            "lighting/<value>/*.jpeg, environment/<value>/*.jpeg, "
+            "viewpoint/<value>/*.jpeg, distance/<value>/*.jpeg. "
+            "If present, it overrides matching columns from --metadata."
         ),
     )
     return parser.parse_args()
@@ -152,6 +178,51 @@ def apply_manual_metadata(metadata: pd.DataFrame, manual_metadata: pd.DataFrame)
             manual_value = manual_by_stem.loc[stem, column]
             if pd.notna(manual_value) and str(manual_value).strip():
                 enriched.at[index, column] = str(manual_value).strip()
+    return enriched
+
+
+def apply_condition_distribution(metadata: pd.DataFrame, distribution_root: Path | None) -> pd.DataFrame:
+    if distribution_root is None or not distribution_root.exists():
+        return metadata
+
+    group_to_column = {
+        "lighting": "lighting",
+        "environment": "environment",
+        "viewpoint": "viewpoint",
+        "distance": "distance",
+    }
+    prepared_names = set(metadata["file_name"].astype(str))
+    enriched = metadata.copy()
+    errors = []
+
+    for group_name, column in group_to_column.items():
+        group_dir = distribution_root / group_name
+        if not group_dir.exists():
+            continue
+
+        mapping: dict[str, str] = {}
+        for category_dir in sorted(path for path in group_dir.iterdir() if path.is_dir()):
+            category = category_dir.name.strip()
+            for image_path in sorted(path for path in category_dir.rglob("*") if path.is_file()):
+                file_name = image_path.name
+                if file_name in mapping:
+                    errors.append(f"Duplicate {group_name} entry for {file_name}")
+                mapping[file_name] = category
+
+        missing = prepared_names - set(mapping)
+        extra = set(mapping) - prepared_names
+        if missing:
+            sample = ", ".join(sorted(missing)[:5])
+            errors.append(f"{group_name} distribution missing {len(missing)} prepared images. Sample: {sample}")
+        if extra:
+            sample = ", ".join(sorted(extra)[:5])
+            errors.append(f"{group_name} distribution has {len(extra)} extra images. Sample: {sample}")
+
+        enriched[column] = enriched["file_name"].map(mapping).fillna(enriched.get(column, ""))
+
+    if errors:
+        raise ValueError("\n".join(errors))
+
     return enriched
 
 
@@ -403,6 +474,7 @@ def main() -> None:
     manual_metadata = load_manual_metadata(args.metadata)
     metadata = build_prepared_metadata(args.prepared, raw_metadata)
     metadata = apply_manual_metadata(metadata, manual_metadata)
+    metadata = apply_condition_distribution(metadata, args.condition_distribution)
     gt_by_file = load_ground_truth(args.prepared, metadata)
 
     one_summary, one_per_class, one_matches = evaluate_one_step(
@@ -473,6 +545,9 @@ def main() -> None:
         "raw_test_images": int(len(raw_metadata)),
         "prepared_images_without_raw_metadata": int((metadata["lighting"] == "unknown").sum()),
         "manual_metadata": str(args.metadata) if args.metadata else None,
+        "condition_distribution": str(args.condition_distribution)
+        if args.condition_distribution and args.condition_distribution.exists()
+        else None,
     }
     (args.output / "report_asset_notes.json").write_text(
         json.dumps(report_notes, indent=2), encoding="utf-8"

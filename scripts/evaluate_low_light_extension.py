@@ -18,6 +18,7 @@ from ultralytics import YOLO
 
 from evaluate_conditions import (
     CLASS_NAMES,
+    CHALLENGING_LIGHTING_VALUES,
     apply_manual_metadata,
     build_prepared_metadata,
     build_raw_metadata,
@@ -25,6 +26,7 @@ from evaluate_conditions import (
     load_ground_truth,
     load_manual_metadata,
     metric_row,
+    select_challenging_lighting,
 )
 from low_light_enhancement import ENHANCEMENT_MODES, enhance_low_light, mean_luminance
 
@@ -283,7 +285,7 @@ def save_plot(summary: pd.DataFrame, output_path: Path) -> None:
     order = [mode for mode in ENHANCEMENT_MODES if mode in pivot.index]
     pivot = pivot.loc[order]
     ax = pivot.plot(kind="bar", figsize=(8, 4), ylim=(0, 1), rot=20)
-    ax.set_title("Low-Light Extension F1 by Enhancement")
+    ax.set_title("Challenging-Light Extension F1 by Enhancement")
     ax.set_xlabel("Enhancement Mode")
     ax.set_ylabel("F1")
     ax.grid(axis="y", alpha=0.3)
@@ -304,9 +306,10 @@ def main() -> None:
     manual_metadata = load_manual_metadata(args.metadata)
     metadata = build_prepared_metadata(args.prepared, raw_metadata)
     metadata = apply_manual_metadata(metadata, manual_metadata)
-    metadata = metadata[metadata["lighting"].astype(str).str.lower() == "low light"].copy()
+    metadata = select_challenging_lighting(metadata)
     if metadata.empty:
-        raise SystemExit("No Low Light images found in prepared test metadata.")
+        values = ", ".join(sorted(CHALLENGING_LIGHTING_VALUES))
+        raise SystemExit(f"No challenging-light images found in prepared test metadata. Expected one of: {values}.")
     gt_by_file = load_ground_truth(args.prepared, metadata)
 
     one_step_model = YOLO(str(args.one_step_weights)) if "one-step" in args.models else None
@@ -387,6 +390,9 @@ def main() -> None:
         "modes": list(args.modes),
         "models": list(args.models),
         "low_light_images": int(len(metadata)),
+        "challenging_light_images": int(len(metadata)),
+        "lighting_values": sorted(str(value) for value in metadata["lighting"].dropna().unique()),
+        "challenging_lighting_values": sorted(CHALLENGING_LIGHTING_VALUES),
         "confidence_threshold": args.conf,
         "iou_threshold": args.iou,
         "gamma": args.gamma,

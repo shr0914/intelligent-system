@@ -14,6 +14,7 @@ import torch
 
 from evaluate_conditions import (
     CLASS_NAMES,
+    CHALLENGING_LIGHTING_VALUES,
     apply_manual_metadata,
     build_prepared_metadata,
     build_raw_metadata,
@@ -21,6 +22,7 @@ from evaluate_conditions import (
     load_ground_truth,
     load_manual_metadata,
     metric_row,
+    select_challenging_lighting,
     summarize_counts,
 )
 from low_light_enhancement import ENHANCEMENT_MODES, enhance_low_light, mean_luminance
@@ -55,7 +57,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-keypoint-conf", type=float, default=0.25)
     parser.add_argument("--min-visible-keypoints", type=int, default=5)
     parser.add_argument("--enhancements", nargs="+", choices=ENHANCEMENT_MODES, default=["none"])
-    parser.add_argument("--low-light-only", action="store_true")
+    parser.add_argument(
+        "--low-light-only",
+        action="store_true",
+        help="Evaluate only challenging-light images: low_light, dim, and shadowy.",
+    )
     parser.add_argument("--gamma", type=float, default=0.65)
     parser.add_argument("--clahe-clip-limit", type=float, default=2.0)
     parser.add_argument("--clahe-tile-grid-size", type=int, default=8)
@@ -318,9 +324,10 @@ def main() -> None:
     metadata = build_prepared_metadata(args.prepared, raw_metadata)
     metadata = apply_manual_metadata(metadata, manual_metadata)
     if args.low_light_only:
-        metadata = metadata[metadata["lighting"].astype(str).str.lower() == "low light"].copy()
+        metadata = select_challenging_lighting(metadata)
         if metadata.empty:
-            raise SystemExit("No Low Light images found in prepared test metadata.")
+            values = ", ".join(sorted(CHALLENGING_LIGHTING_VALUES))
+            raise SystemExit(f"No challenging-light images found in prepared test metadata. Expected one of: {values}.")
     gt_by_file = load_ground_truth(args.prepared, metadata)
     metadata_by_file = metadata.set_index("file_name")
 
@@ -397,6 +404,9 @@ def main() -> None:
     notes = {
         "pose_weights": str(args.pose_weights),
         "prepared_test_images": int(len(metadata)),
+        "challenging_light_images": int(len(metadata)) if args.low_light_only else None,
+        "lighting_values": sorted(str(value) for value in metadata["lighting"].dropna().unique()),
+        "challenging_lighting_values": sorted(CHALLENGING_LIGHTING_VALUES),
         "confidence_threshold": args.conf,
         "iou_threshold": args.iou,
         "imgsz": args.imgsz,

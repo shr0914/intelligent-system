@@ -18,11 +18,13 @@ from ultralytics import YOLO
 
 from evaluate_conditions import (
     CLASS_NAMES,
+    apply_manual_metadata,
     build_prepared_metadata,
     build_raw_metadata,
     find_one_step_predictions,
     iou,
     load_ground_truth,
+    load_manual_metadata,
     metric_row,
 )
 from low_light_enhancement import enhance_low_light
@@ -41,6 +43,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Tune inference thresholds and crop padding.")
     parser.add_argument("--prepared", type=Path, default=PROJECT_ROOT / "prepared_dataset")
     parser.add_argument("--raw-test", type=Path, default=PROJECT_ROOT / "test_dataset")
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        default=None,
+        help="Optional condition metadata CSV used to enrich prepared test images.",
+    )
     parser.add_argument("--output", type=Path, default=PROJECT_ROOT / "runs" / "report_assets")
     parser.add_argument("--models", nargs="+", choices=["one-step", "two-step"], default=["one-step", "two-step"])
     parser.add_argument("--one-step-predictions", type=Path, default=None)
@@ -333,7 +341,9 @@ def main() -> None:
     person_confs = parse_float_list(args.person_confs, [0.15, 0.20, 0.25, 0.30, 0.35])
     crop_paddings = parse_float_list(args.crop_paddings, [0.00, 0.05, 0.10, 0.15, 0.20])
     raw_metadata = build_raw_metadata(args.raw_test)
+    manual_metadata = load_manual_metadata(args.metadata)
     metadata = build_prepared_metadata(args.prepared, raw_metadata)
+    metadata = apply_manual_metadata(metadata, manual_metadata)
     gt_by_file = load_ground_truth(args.prepared, metadata)
 
     summary_rows = []
